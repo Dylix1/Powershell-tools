@@ -1,5 +1,5 @@
 # Import the Active Directory module
-Import-Module ActiveDirectory -ErrorAction Stop
+# Import-Module ActiveDirectory -ErrorAction Stop
 
 # Function to validate AD group existence
 function Test-ADGroupExists {
