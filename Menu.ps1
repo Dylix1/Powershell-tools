@@ -1,4 +1,6 @@
 # Main menu script for administrative tools
+$ErrorActionPreference = 'Stop'
+
 function Show-MainMenu {
     Clear-Host
     Write-Host "=== PowerShell Administrative Tools ===" -ForegroundColor Cyan
@@ -18,28 +20,34 @@ function Invoke-Tool {
         [string]$ToolName
     )
     try {
-        Clear-Host  # Clear screen before loading tool
+        Clear-Host
         Write-Host "=== $ToolName ===" -ForegroundColor Cyan
         Write-Host "Loading..." -ForegroundColor Gray
         
-        # Get the current script's directory, fallback to current directory if not available
+        # Get the current script's directory and construct Scripts folder path
         $scriptDir = if ($PSScriptRoot) {
             $PSScriptRoot
         } else {
             $PWD.Path
         }
         
-        # Construct full path to the target script
-        $fullPath = Join-Path -Path $scriptDir -ChildPath $ScriptPath
+        # Construct path to Scripts subfolder and tool
+        $scriptsFolder = Join-Path -Path $scriptDir -ChildPath "Scripts"
+        $fullPath = Join-Path -Path $scriptsFolder -ChildPath $ScriptPath
+        
+        if (!(Test-Path $scriptsFolder)) {
+            Write-Host "Scripts folder not found. Creating Scripts folder..." -ForegroundColor Yellow
+            New-Item -ItemType Directory -Path $scriptsFolder | Out-Null
+        }
         
         if (Test-Path $fullPath) {
-            Clear-Host  # Clear loading message before executing tool
+            Clear-Host
             . $fullPath
             Write-Host "`nPress any key to return to main menu..."
             $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
         } else {
             Write-Host "Script not found at: $fullPath" -ForegroundColor Red
-            Write-Host "Please ensure the following script exists: $ScriptPath" -ForegroundColor Yellow
+            Write-Host "Please ensure the script exists in the Scripts folder: $ScriptPath" -ForegroundColor Yellow
             Start-Sleep -Seconds 3
         }
     }
@@ -58,9 +66,10 @@ do {
     switch ($choice) {
         "1" { Invoke-Tool -ScriptPath "EnableAutoIncrementArchiving.ps1" -ToolName "Exchange Archive Manager" }
         "2" { Invoke-Tool -ScriptPath "ExportGrouptoCSV.ps1" -ToolName "AD Group Export" }
-        "3" { Invoke-Tool -ScriptPath "ExportDistributionGroupMembers" -ToolName "Distribution Group Export" }
+        "3" { Invoke-Tool -ScriptPath "ExportDistributionGroupMembers.ps1" -ToolName "Distribution Group Export" }
         "4" { Invoke-Tool -ScriptPath "CalendarTools.ps1" -ToolName "Calendar Permissions Manager" }
         "5" { 
+            Clear-Host
             Write-Host "`nExiting..." -ForegroundColor Green
             exit 
         }
