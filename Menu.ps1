@@ -8,7 +8,9 @@ function Show-MainMenu {
     Write-Host "2. Active Directory Group Member Export" -ForegroundColor Yellow
     Write-Host "3. Distribution Group Member Export" -ForegroundColor Yellow
     Write-Host "4. Calendar Permissions Manager" -ForegroundColor Yellow
-    Write-Host "5. Exit" -ForegroundColor Yellow
+    Write-Host "5. User Shared-Mailbox Access" -ForegroundColor Yellow
+    Write-Host "6. Add Mailbox Permissions" -ForegroundColor Yellow
+    Write-Host "7. Exit" -ForegroundColor Yellow
     Write-Host "=====================================`n" -ForegroundColor Cyan
 }
 
@@ -61,14 +63,16 @@ function Invoke-Tool {
 # Main loop
 do {
     Show-MainMenu
-    $choice = Read-Host "Select an option (1-5)"
+    $choice = Read-Host "Select an option (1-7)"
     
     switch ($choice) {
         "1" { Invoke-Tool -ScriptPath "EnableAutoIncrementArchiving.ps1" -ToolName "Exchange Archive Manager" }
         "2" { Invoke-Tool -ScriptPath "ExportGrouptoCSV.ps1" -ToolName "AD Group Export" }
         "3" { Invoke-Tool -ScriptPath "ExportDistributionGroupMembers.ps1" -ToolName "Distribution Group Export" }
         "4" { Invoke-Tool -ScriptPath "CalendarTools.ps1" -ToolName "Calendar Permissions Manager" }
-        "5" { 
+        "5" { Invoke-Tool -ScriptPath "GetSharedMailboxPermissions.ps1" -ToolName "User Shared-Mailbox Access" }
+        "6" { Invoke-Tool -ScriptPath "AddMailboxPermissions.ps1" -ToolName "Add Mailbox Permissions" }
+        "7" { 
             Clear-Host
             Write-Host "`nExiting..." -ForegroundColor Green
             exit 
