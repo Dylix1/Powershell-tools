@@ -1,24 +1,6 @@
-# Function to connect to Exchange Online
-function Connect-ExchangeOnlineSession {
-    param (
-        [string]$AdminUser
-    )
-    try {
-        Connect-ExchangeOnline -UserPrincipalName $AdminUser -ShowProgress $false
-        Write-Host "Successfully connected to Exchange Online as $AdminUser." -ForegroundColor Green
-    } catch {
-        Write-Host "Error connecting to Exchange Online: $_" -ForegroundColor Red
-        exit
-    }
-}
-
-# Function to get shared mailbox permissions
 function Get-SharedMailboxPermissions {
-    param (
-        [string]$OutputFile
-    )
+    param ([string]$OutputFile)
     try {
-        # Get all shared mailboxes
         $sharedMailboxes = Get-Mailbox -RecipientTypeDetails SharedMailbox -ResultSize Unlimited
         Write-Host "Found $($sharedMailboxes.Count) shared mailboxes." -ForegroundColor Green
 
@@ -26,18 +8,14 @@ function Get-SharedMailboxPermissions {
         foreach ($mailbox in $sharedMailboxes) {
             Write-Host "Processing mailbox: $($mailbox.DisplayName)" -ForegroundColor Yellow
             
-            # Get full access permissions
             $fullAccess = Get-MailboxPermission -Identity $mailbox.Identity | 
                 Where-Object {$_.User -notlike "NT AUTHORITY\*" -and $_.User -notlike "S-1-5*" -and $_.IsInherited -eq $false}
             
-            # Get Send As permissions
             $sendAs = Get-RecipientPermission -Identity $mailbox.Identity | 
                 Where-Object {$_.Trustee -notlike "NT AUTHORITY\*" -and $_.Trustee -notlike "S-1-5*"}
             
-            # Get Send on Behalf permissions
             $sendOnBehalf = $mailbox.GrantSendOnBehalfTo
             
-            # Combine permissions into results
             foreach ($access in $fullAccess) {
                 $results += [PSCustomObject]@{
                     SharedMailbox = $mailbox.DisplayName
@@ -66,10 +44,8 @@ function Get-SharedMailboxPermissions {
             }
         }
 
-        # Display results in console
         $results | Format-Table -AutoSize
 
-        # Export to CSV if specified
         if ($OutputFile) {
             $results | Export-Csv -Path $OutputFile -NoTypeInformation -Encoding UTF8
             Write-Host "Permissions exported to '$OutputFile'." -ForegroundColor Green
@@ -81,21 +57,12 @@ function Get-SharedMailboxPermissions {
     }
 }
 
-# Function to disconnect from Exchange Online
-function Disconnect-ExchangeOnlineSession {
-    try {
-        Disconnect-ExchangeOnline -Confirm:$false
-        Write-Host "Disconnected from Exchange Online." -ForegroundColor Green
-    } catch {
-        Write-Host "Error disconnecting from Exchange Online: $_" -ForegroundColor Red
-    }
-}
-
 # Main script
-Write-Host "`n=== Exchange Online Shared Mailbox Access Report ===" -ForegroundColor Cyan
-$AdminUPN = Read-Host "`nEnter your Exchange Online admin email address"
+Clear-Host
+Write-Host "=== Exchange Online Shared Mailbox Access Report ===" -ForegroundColor Cyan
+Write-Host "`nConnected to: $($script:ExchangeConnection.OrganizationName)" -ForegroundColor Green
+Write-Host "User: $($script:ExchangeConnection.CurrentUser)`n" -ForegroundColor Green
 
-# Ask if user wants to export to CSV
 $exportChoice = Read-Host "Do you want to export the results to a CSV file? (Y/N)"
 if ($exportChoice -eq 'Y' -or $exportChoice -eq 'y') {
     $defaultPath = "C:\SharedMailboxPermissions.csv"
@@ -106,14 +73,5 @@ if ($exportChoice -eq 'Y' -or $exportChoice -eq 'y') {
     $outputFile = $null
 }
 
-# Execute the script
-Write-Host "`nConnecting to Exchange Online..." -ForegroundColor Cyan
-Connect-ExchangeOnlineSession -AdminUser $AdminUPN
-
 Write-Host "`nRetrieving shared mailbox permissions..." -ForegroundColor Cyan
 Get-SharedMailboxPermissions -OutputFile $outputFile
-
-Write-Host "`nCleaning up..." -ForegroundColor Cyan
-Disconnect-ExchangeOnlineSession
-
-Write-Host "`nScript execution completed." -ForegroundColor Green

@@ -1,27 +1,3 @@
-function Connect-ExchangeOnlineSession {
-    param (
-        [Parameter(Mandatory)]
-        [string]$AdminUser,
-        [switch]$UseBasicAuth
-    )
-    try {
-        $params = @{
-            UserPrincipalName = $AdminUser
-            ShowProgress = $false
-            ShowBanner = $false
-        }
-        if ($UseBasicAuth) {
-            $params.Add('BasicAuthentication', $true)
-        }
-        Connect-ExchangeOnline @params
-        Write-Host "Successfully connected to Exchange Online as $AdminUser." -ForegroundColor Green
-        return $true
-    } catch {
-        Write-Host "Error connecting to Exchange Online: $_" -ForegroundColor Red
-        return $false
-    }
-}
-
 function Get-CalendarFolderName {
     param (
         [Parameter(Mandatory)]
@@ -100,66 +76,47 @@ Available Access Rights:
 }
 
 # Main script
-try {
-    $ErrorActionPreference = 'Stop'
-    Write-Host "=== Exchange Online Calendar Permissions Manager ===" -ForegroundColor Cyan
+Clear-Host
+Write-Host "=== Calendar Permissions Manager ===" -ForegroundColor Cyan
+Write-Host "`nConnected to: $($script:ExchangeConnection.OrganizationName)" -ForegroundColor Green
+Write-Host "User: $($script:ExchangeConnection.CurrentUser)`n" -ForegroundColor Green
 
-    $AdminUPN = Read-Host "Enter Exchange Online admin email"
+do {
+    Write-Host "`nOptions:" -ForegroundColor Cyan
+    Write-Host "1. Manage Calendar Permissions"
+    Write-Host "2. Show Access Rights Help"
+    Write-Host "3. Return to Main Menu"
+
+    $choice = Read-Host "`nEnter your choice (1-3)"
     
-    $maxRetries = 3
-    $connected = $false
-    for ($i = 1; $i -le $maxRetries -and !$connected; $i++) {
-        $connected = Connect-ExchangeOnlineSession -AdminUser $AdminUPN
-        if (!$connected -and $i -lt $maxRetries) {
-            Write-Host "Retrying connection ($i/$maxRetries)..." -ForegroundColor Yellow
-            Start-Sleep -Seconds 3
+    switch ($choice) {
+        "1" {
+            $Mailbox = Read-Host "`nEnter mailbox to manage"
+            $CalendarName = Get-CalendarFolderName -Mailbox $Mailbox
+            if (!$CalendarName) { continue }
+
+            do {
+                Write-Host "`nOptions for $($Mailbox)'s calendar:" -ForegroundColor Cyan
+                Write-Host "1. View current permissions"
+                Write-Host "2. Add/Update permission"
+                Write-Host "3. Back to main options"
+                
+                $subChoice = Read-Host "`nEnter your choice (1-3)"
+                
+                switch ($subChoice) {
+                    "1" { Show-CalendarPermissions -Mailbox $Mailbox -CalendarName $CalendarName }
+                    "2" {
+                        $User = Read-Host "`nEnter user email to grant permission"
+                        Show-AccessRightsHelp
+                        $AccessRight = Read-Host "`nEnter access right"
+                        if ([string]::IsNullOrWhiteSpace($AccessRight)) { continue }
+                        Set-CalendarPermission -Mailbox $Mailbox -CalendarName $CalendarName -User $User -AccessRight $AccessRight
+                    }
+                    "3" { break }
+                }
+            } while ($subChoice -ne "3")
         }
+        "2" { Show-AccessRightsHelp }
+        "3" { return }
     }
-    if (!$connected) { exit 1 }
-
-    do {
-        $Mailbox = Read-Host "`nEnter mailbox to manage (or 'exit' to quit)"
-        if ($Mailbox -eq 'exit') { break }
-
-        $CalendarName = Get-CalendarFolderName -Mailbox $Mailbox
-        if (!$CalendarName) { continue }
-
-        do {
-            Write-Host "`nOptions for $($Mailbox)'s calendar:" -ForegroundColor Cyan
-            Write-Host "1. View current permissions"
-            Write-Host "2. Add/Update permission"
-            Write-Host "3. Show access rights help"
-            Write-Host "4. Back to mailbox selection"
-            
-            $choice = Read-Host "`nEnter your choice (1-4)"
-            
-            switch ($choice) {
-                "1" {
-                    Show-CalendarPermissions -Mailbox $Mailbox -CalendarName $CalendarName
-                }
-                "2" {
-                    $User = Read-Host "Enter user email to grant permission"
-                    Show-AccessRightsHelp
-                    $AccessRight = Read-Host "Enter access right"
-                    if ([string]::IsNullOrWhiteSpace($AccessRight)) { continue }
-                    Set-CalendarPermission -Mailbox $Mailbox -CalendarName $CalendarName -User $User -AccessRight $AccessRight
-                }
-                "3" {
-                    Show-AccessRightsHelp
-                }
-                "4" {
-                    break
-                }
-            }
-        } while ($choice -ne "4")
-        
-    } while ($true)
-
-} catch {
-    Write-Host "Critical error: $_" -ForegroundColor Red
-} finally {
-    if ($connected) {
-        Disconnect-ExchangeOnline -Confirm:$false
-        Write-Host "Successfully disconnected from Exchange Online." -ForegroundColor Green
-    }
-}
+} while ($true)

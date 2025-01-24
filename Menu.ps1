@@ -1,9 +1,19 @@
-# Main menu script for administrative tools
+# Import connection manager and set error preference
 $ErrorActionPreference = 'Stop'
+. $PSScriptRoot\Scripts\ConnectionManager.ps1
 
 function Show-MainMenu {
     Clear-Host
     Write-Host "=== PowerShell Administrative Tools ===" -ForegroundColor Cyan
+    
+    if ($script:ExchangeConnection.IsConnected) {
+        Write-Host "`nConnected to: $($script:ExchangeConnection.OrganizationName)" -ForegroundColor Green
+        Write-Host "User: $($script:ExchangeConnection.CurrentUser)`n" -ForegroundColor Green
+    } else {
+        Write-Host "`nNot connected to Exchange Online`n" -ForegroundColor Yellow
+    }
+
+    Write-Host "0. Connect/Switch Exchange Online Account" -ForegroundColor Yellow
     Write-Host "1. Exchange Online Archive Manager" -ForegroundColor Yellow
     Write-Host "2. Active Directory Group Member Export" -ForegroundColor Yellow
     Write-Host "3. Distribution Group Member Export" -ForegroundColor Yellow
@@ -16,29 +26,25 @@ function Show-MainMenu {
 
 function Invoke-Tool {
     param (
-        [Parameter(Mandatory)]
-        [string]$ScriptPath,
-        [Parameter(Mandatory)]
-        [string]$ToolName
+        [Parameter(Mandatory)][string]$ScriptPath,
+        [Parameter(Mandatory)][string]$ToolName
     )
     try {
+        # Check for Exchange connection if needed
+        if ($ScriptPath -notmatch "ExportGrouptoCSV" -and -not $script:ExchangeConnection.IsConnected) {
+            Write-Host "`nExchange Online connection required." -ForegroundColor Yellow
+            if (-not (Connect-ExchangeOnlineSession)) {
+                return
+            }
+        }
+
         Clear-Host
         Write-Host "=== $ToolName ===" -ForegroundColor Cyan
-        Write-Host "Loading..." -ForegroundColor Gray
         
-        # Get the current script's directory and construct Scripts folder path
-        $scriptDir = if ($PSScriptRoot) {
-            $PSScriptRoot
-        } else {
-            $PWD.Path
-        }
-        
-        # Construct path to Scripts subfolder and tool
-        $scriptsFolder = Join-Path -Path $scriptDir -ChildPath "Scripts"
+        $scriptsFolder = Join-Path -Path $PSScriptRoot -ChildPath "Scripts"
         $fullPath = Join-Path -Path $scriptsFolder -ChildPath $ScriptPath
-        
+
         if (!(Test-Path $scriptsFolder)) {
-            Write-Host "Scripts folder not found. Creating Scripts folder..." -ForegroundColor Yellow
             New-Item -ItemType Directory -Path $scriptsFolder | Out-Null
         }
         
@@ -48,8 +54,7 @@ function Invoke-Tool {
             Write-Host "`nPress any key to return to main menu..."
             $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
         } else {
-            Write-Host "Script not found at: $fullPath" -ForegroundColor Red
-            Write-Host "Please ensure the script exists in the Scripts folder: $ScriptPath" -ForegroundColor Yellow
+            Write-Host "Script not found: $fullPath" -ForegroundColor Red
             Start-Sleep -Seconds 3
         }
     }
@@ -63,9 +68,10 @@ function Invoke-Tool {
 # Main loop
 do {
     Show-MainMenu
-    $choice = Read-Host "Select an option (1-7)"
+    $choice = Read-Host "Select an option (0-7)"
     
     switch ($choice) {
+        "0" { Connect-ExchangeOnlineSession -Force }
         "1" { Invoke-Tool -ScriptPath "EnableAutoIncrementArchiving.ps1" -ToolName "Exchange Archive Manager" }
         "2" { Invoke-Tool -ScriptPath "ExportGrouptoCSV.ps1" -ToolName "AD Group Export" }
         "3" { Invoke-Tool -ScriptPath "ExportDistributionGroupMembers.ps1" -ToolName "Distribution Group Export" }
@@ -73,6 +79,9 @@ do {
         "5" { Invoke-Tool -ScriptPath "GetSharedMailboxPermissions.ps1" -ToolName "User Shared-Mailbox Access" }
         "6" { Invoke-Tool -ScriptPath "AddMailboxPermissions.ps1" -ToolName "Add Mailbox Permissions" }
         "7" { 
+            if ($script:ExchangeConnection.IsConnected) {
+                Disconnect-ExchangeOnlineSession
+            }
             Clear-Host
             Write-Host "`nExiting..." -ForegroundColor Green
             exit 

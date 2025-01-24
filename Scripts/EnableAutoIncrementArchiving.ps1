@@ -1,129 +1,105 @@
-function Connect-ExchangeOnlineSession {
-    param (
-        [Parameter(Mandatory)]
-        [string]$AdminUser,
-        [switch]$UseBasicAuth
-    )
-    try {
-        $params = @{
-            UserPrincipalName = $AdminUser
-            ShowProgress = $false
-            ShowBanner = $false
-        }
-        if ($UseBasicAuth) {
-            $params.Add('BasicAuthentication', $true)
-        }
-        Connect-ExchangeOnline @params
-        Write-Host "Successfully connected to Exchange Online as $AdminUser." -ForegroundColor Green
-        return $true
-    } catch {
-        Write-Host "Error connecting to Exchange Online: $_" -ForegroundColor Red
-        return $false
-    }
-}
-
-function Check-AutoExpandingArchive {
+function Get-MailboxArchiveStatus {
     param (
         [Parameter(Mandatory)]
         [string]$Mailbox
     )
     try {
         $mailboxInfo = Get-Mailbox -Identity $Mailbox -ErrorAction Stop | 
-            Select-Object AutoExpandingArchiveEnabled, ArchiveStatus, ArchiveQuota, ArchiveWarningQuota
+            Select-Object DisplayName, UserPrincipalName, ArchiveStatus, ArchiveDatabase,
+                        AutoExpandingArchiveEnabled, ArchiveQuota, ArchiveWarningQuota
 
-        $output = @{
-            AutoExpanding = $mailboxInfo.AutoExpandingArchiveEnabled
-            Status = $mailboxInfo.ArchiveStatus
-            Quota = $mailboxInfo.ArchiveQuota
-            WarningQuota = $mailboxInfo.ArchiveWarningQuota
+        Write-Host "`nMailbox Archive Information:" -ForegroundColor Cyan
+        Write-Host "Display Name: $($mailboxInfo.DisplayName)"
+        Write-Host "Email: $($mailboxInfo.UserPrincipalName)"
+        Write-Host "Archive Status: $($mailboxInfo.ArchiveStatus)"
+        Write-Host "Archive Database: $($mailboxInfo.ArchiveDatabase)"
+        Write-Host "Auto-Expanding Archive: $($mailboxInfo.AutoExpandingArchiveEnabled)"
+        Write-Host "Archive Quota: $($mailboxInfo.ArchiveQuota)"
+        Write-Host "Archive Warning Quota: $($mailboxInfo.ArchiveWarningQuota)"
+
+        if ($mailboxInfo.ArchiveStatus -eq "Active" -or $mailboxInfo.ArchiveDatabase) {
+            $archiveStats = Get-MailboxStatistics -Identity $Mailbox -Archive -ErrorAction Stop |
+                Select-Object DisplayName, TotalItemSize, ItemCount
+
+            Write-Host "`nArchive Statistics:" -ForegroundColor Cyan
+            Write-Host "Total Items: $($archiveStats.ItemCount)"
+            Write-Host "Total Size: $($archiveStats.TotalItemSize)"
         }
-        return $output
+
+        return $mailboxInfo
     } catch {
-        Write-Host "Error checking archive status for $Mailbox" -ForegroundColor Red
+        Write-Host "Error checking archive status: $_" -ForegroundColor Red
         return $null
     }
 }
 
-function Enable-AutoExpandingArchive {
+function Start-RetentionPolicyProcessing {
     param (
         [Parameter(Mandatory)]
-        [string]$Mailbox,
-        [switch]$Force
+        [string]$Mailbox
     )
     try {
-        $params = @{
-            Identity = $Mailbox
-            AutoExpandingArchive = $true
-            ErrorAction = 'Stop'
-        }
-        if ($Force) {
-            $params.Add('Confirm', $false)
-        }
-        Enable-Mailbox @params
-        Write-Host "Successfully enabled AutoExpandingArchive for $Mailbox." -ForegroundColor Green
+        $mailboxInfo = Get-Mailbox -Identity $Mailbox -ErrorAction Stop
+        Write-Host "Mailbox found. Starting retention policy processing..." -ForegroundColor Yellow
+        
+        Start-ManagedFolderAssistant -Identity $Mailbox -ErrorAction Stop
+        $stats = Get-MailboxFolderStatistics -Identity $Mailbox -FolderScope RecoverableItems
+        
+        Write-Host "`nRetention Policy Processing initiated successfully." -ForegroundColor Green
+        Write-Host "Current recoverable items status:" -ForegroundColor Cyan
+        $stats | Format-Table Name, ItemsInFolder, FolderAndSubfolderSize
+        
         return $true
     } catch {
-        Write-Host "Error enabling AutoExpandingArchive for $Mailbox" -ForegroundColor Red
+        Write-Host "Error processing retention policy: $_" -ForegroundColor Red
         return $false
     }
 }
 
-function Disconnect-ExchangeOnlineSession {
+function Enable-CustomAutoExpandingArchive {
+    param (
+        [Parameter(Mandatory)]
+        [string]$Mailbox
+    )
     try {
-        Disconnect-ExchangeOnline -Confirm:$false -ErrorAction Stop
-        Write-Host "Successfully disconnected from Exchange Online." -ForegroundColor Green
-    } catch {
-        Write-Host "Error disconnecting from Exchange Online" -ForegroundColor Red
-    }
-}
+        $mailboxInfo = Get-Mailbox -Identity $Mailbox -ErrorAction Stop
+        
+        if ($mailboxInfo.ArchiveStatus -ne "Active" -and -not $mailboxInfo.ArchiveDatabase) {
+            Write-Host "Archive is not active for this mailbox. Please enable archive first." -ForegroundColor Yellow
+            return $false
+        }
 
-function Show-ArchiveStatus {
-    param($status)
-    Write-Host "`nArchive Status:" -ForegroundColor Cyan
-    Write-Host "Auto-Expanding: $($status.AutoExpanding)"
-    Write-Host "Status: $($status.Status)"
-    Write-Host "Quota: $($status.Quota)"
-    Write-Host "Warning Quota: $($status.WarningQuota)`n"
+        Enable-Mailbox -Identity $Mailbox -AutoExpandingArchive -ErrorAction Stop
+        Write-Host "Successfully enabled auto-expanding archive for $Mailbox" -ForegroundColor Green
+        return $true
+    } catch {
+        Write-Host "Error enabling auto-expanding archive: $_" -ForegroundColor Red
+        return $false
+    }
 }
 
 # Main script
-try {
-    $ErrorActionPreference = 'Stop'
-    Write-Host "=== Exchange Online Archive Manager ===" -ForegroundColor Cyan
+Clear-Host
+Write-Host "=== Exchange Online Archive Manager ===" -ForegroundColor Cyan
+Write-Host "`nConnected to: $($script:ExchangeConnection.OrganizationName)" -ForegroundColor Green
+Write-Host "User: $($script:ExchangeConnection.CurrentUser)`n" -ForegroundColor Green
 
-    $AdminUPN = Read-Host "Enter Exchange Online admin email"
+do {
+    Write-Host "`nOptions:" -ForegroundColor Cyan
+    Write-Host "1. Check Archive Status"
+    Write-Host "2. Enable Auto-Expanding Archive"
+    Write-Host "3. Force Retention Processing"
+    Write-Host "4. Return to Main Menu"
     
-    $maxRetries = 3
-    $connected = $false
-    for ($i = 1; $i -le $maxRetries -and !$connected; $i++) {
-        $connected = Connect-ExchangeOnlineSession -AdminUser $AdminUPN
-        if (!$connected -and $i -lt $maxRetries) {
-            Write-Host "Retrying connection ($i/$maxRetries)..." -ForegroundColor Yellow
-            Start-Sleep -Seconds 3
+    $choice = Read-Host "`nEnter your choice (1-4)"
+    if ($choice -eq '4') { return }
+    
+    if ($choice -in '1','2','3') {
+        $Mailbox = Read-Host "`nEnter mailbox to manage"
+        switch ($choice) {
+            '1' { Get-MailboxArchiveStatus -Mailbox $Mailbox }
+            '2' { Enable-CustomAutoExpandingArchive -Mailbox $Mailbox }
+            '3' { Start-RetentionPolicyProcessing -Mailbox $Mailbox }
         }
     }
-    if (!$connected) { exit 1 }
-
-    do {
-        $Mailbox = Read-Host "`nEnter mailbox to manage (or 'exit' to quit)"
-        if ($Mailbox -eq 'exit') { break }
-
-        $status = Check-AutoExpandingArchive -Mailbox $Mailbox
-        if ($status) {
-            Show-ArchiveStatus -status $status
-            if (!$status.AutoExpanding) {
-                $enable = Read-Host "Enable AutoExpandingArchive? (Y/N)"
-                if ($enable -eq 'Y') {
-                    Enable-AutoExpandingArchive -Mailbox $Mailbox -Force
-                }
-            }
-        }
-    } while ($true)
-
-} catch {
-    Write-Host "Critical error: $_" -ForegroundColor Red
-} finally {
-    if ($connected) {
-        Disconnect-ExchangeOnlineSession
-    }
-}
+} while ($true)

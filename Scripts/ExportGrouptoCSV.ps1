@@ -1,7 +1,3 @@
-# Import the Active Directory module
-# Import-Module ActiveDirectory -ErrorAction Stop
-
-# Function to validate AD group existence
 function Test-ADGroupExists {
     param([string]$GroupName)
     try {
@@ -12,7 +8,6 @@ function Test-ADGroupExists {
     }
 }
 
-# Function to sanitize file path
 function Get-SafeFilePath {
     param([string]$BasePath, [string]$GroupName)
     $safeGroupName = [RegEx]::Replace($GroupName, "[{0}]" -f ([RegEx]::Escape([String][System.IO.Path]::GetInvalidFileNameChars())), '_')
@@ -20,51 +15,31 @@ function Get-SafeFilePath {
     return Join-Path -Path $BasePath -ChildPath "GroupMembers_${safeGroupName}_${timestamp}.csv"
 }
 
-# Prompt user to select the execution mode
-Write-Host "Select execution mode:" -ForegroundColor Cyan
-Write-Host "1. Local device execution" -ForegroundColor Cyan
-Write-Host "2. Copy this script to clipboard" -ForegroundColor Cyan
-$ExecutionMode = Read-Host -Prompt "Enter 1 or 2"
-
-# Validate user input
-if ($ExecutionMode -notin @("1", "2")) {
-    Write-Host "Invalid selection. Exiting." -ForegroundColor Red
-    exit 1
-}
-
-# Function to execute the script locally
 function Open-Locally {
     [CmdletBinding()]
     param()
-    
     try {
-        # Prompt the user to input the group name
         $GroupName = Read-Host -Prompt "Enter the Active Directory group name"
 
-        # Verify if a group name was provided
         if ([string]::IsNullOrWhiteSpace($GroupName)) {
             throw "No group name provided."
         }
 
-        # Verify group exists
         if (-not (Test-ADGroupExists -GroupName $GroupName)) {
             throw "Group '$GroupName' does not exist in Active Directory."
         }
 
-        # Create safe output path
         $OutputFile = Get-SafeFilePath -BasePath $env:TEMP -GroupName $GroupName
 
-        # Get all members of the group
         Write-Host "Retrieving group members..." -ForegroundColor Yellow
         $GroupMembers = Get-ADGroupMember -Identity $GroupName -Recursive | 
             Where-Object { $_.objectClass -eq 'user' }
 
         if (-not $GroupMembers) {
             Write-Host "No members found in the group '$GroupName'." -ForegroundColor Yellow
-            exit 0
+            return
         }
 
-        # Extract required properties and export to CSV
         Write-Host "Processing member details..." -ForegroundColor Yellow
         $Results = foreach ($Member in $GroupMembers) {
             try {
@@ -81,7 +56,6 @@ function Open-Locally {
 
         $Results | Export-Csv -Path $OutputFile -NoTypeInformation -Encoding UTF8
 
-        # Verify export was successful
         if (Test-Path $OutputFile) {
             Write-Host "Export complete. File saved at: $OutputFile" -ForegroundColor Green
             Write-Host "Total members exported: $($Results.Count)" -ForegroundColor Green
@@ -90,15 +64,12 @@ function Open-Locally {
         }
     } catch {
         Write-Host "Error: $($_.Exception.Message)" -ForegroundColor Red
-        exit 1
     }
 }
 
-# Function to copy the script to clipboard
 function Copy-ScriptToClipboard {
     [CmdletBinding()]
     param()
-    
     try {
         $GroupName = Read-Host -Prompt "Enter the Active Directory group name for the placeholder"
         
@@ -106,7 +77,6 @@ function Copy-ScriptToClipboard {
             throw "No group name provided."
         }
 
-        # Prepare script content with placeholder logic
         $ScriptContent = @"
 # Import the Active Directory module
 Import-Module ActiveDirectory -ErrorAction Stop
@@ -126,7 +96,6 @@ try {
 `$timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
 `$OutputFile = Join-Path -Path `$env:TEMP -ChildPath "GroupMembers_`$(`$ADGroupName)_`${timestamp}.csv"
 
-# Get all members of the group
 try {
     Write-Host "Retrieving group members..." -ForegroundColor Yellow
     `$GroupMembers = Get-ADGroupMember -Identity `$ADGroupName -Recursive | 
@@ -137,7 +106,6 @@ try {
         exit 0
     }
 
-    # Extract required properties and export to CSV
     Write-Host "Processing member details..." -ForegroundColor Yellow
     `$Results = foreach (`$Member in `$GroupMembers) {
         try {
@@ -154,7 +122,6 @@ try {
 
     `$Results | Export-Csv -Path `$OutputFile -NoTypeInformation -Encoding UTF8
 
-    # Verify export was successful
     if (Test-Path `$OutputFile) {
         Write-Host "Export complete. File saved at: `$OutputFile" -ForegroundColor Green
         Write-Host "Total members exported: `$(`$Results.Count)" -ForegroundColor Green
@@ -171,11 +138,23 @@ try {
         Write-Host "Script copied to clipboard successfully with group name placeholder set to '$GroupName'." -ForegroundColor Green
     } catch {
         Write-Host "Error: $($_.Exception.Message)" -ForegroundColor Red
-        exit 1
     }
 }
 
-# Execute based on user selection
+# Main script
+Clear-Host
+Write-Host "=== Active Directory Group Member Export ===" -ForegroundColor Cyan
+
+Write-Host "Select execution mode:" -ForegroundColor Cyan
+Write-Host "1. Local device execution" -ForegroundColor Yellow
+Write-Host "2. Copy script to clipboard" -ForegroundColor Yellow
+$ExecutionMode = Read-Host -Prompt "Enter 1 or 2"
+
+if ($ExecutionMode -notin @("1", "2")) {
+    Write-Host "Invalid selection. Exiting." -ForegroundColor Red
+    return
+}
+
 switch ($ExecutionMode) {
     "1" { Open-Locally }
     "2" { Copy-ScriptToClipboard }
