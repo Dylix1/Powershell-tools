@@ -22,7 +22,8 @@ function Show-MainMenu {
     Write-Host "6. Add Mailbox Permissions" -ForegroundColor Yellow
     Write-Host "7. Copy Group Memberships from user to user" -ForegroundColor Yellow
     Write-Host "8. Hybrid Group Member Export" -ForegroundColor Yellow
-    Write-Host "9. Exit" -ForegroundColor Yellow
+    Write-Host "9. Sharepoint Site Permissions" -ForegroundColor Yellow
+    Write-Host "10. Exit" -ForegroundColor Yellow
     Write-Host "=====================================`n" -ForegroundColor Cyan
 }
 
@@ -70,7 +71,7 @@ function Invoke-Tool {
 # Main loop
 do {
     Show-MainMenu
-    $choice = Read-Host "Select an option (0-9)"
+    $choice = Read-Host "Select an option (0-10)"
     
     switch ($choice) {
         "0" { Connect-ExchangeOnlineSession -Force }
@@ -82,7 +83,8 @@ do {
         "6" { Invoke-Tool -ScriptPath "AddMailboxPermissions.ps1" -ToolName "Add Mailbox Permissions" }
         "7" { Invoke-Tool -ScriptPath "CopyGroupMemberships.ps1" -ToolName "Copy Group Memberships" }
         "8" { Invoke-Tool -ScriptPath "HybridGroupExport.ps1" -ToolName "Hybrid Group Member Export" }
-        "9" { 
+        "9" { Invoke-Tool -ScriptPath "GetSharepointPermissions.ps1" -ToolName "Sharepoint Site Permissions" }
+        "10" { 
             if ($script:ExchangeConnection.IsConnected) {
                 Disconnect-ExchangeOnlineSession
             }
