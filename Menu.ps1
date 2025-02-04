@@ -20,7 +20,9 @@ function Show-MainMenu {
     Write-Host "4. Calendar Permissions Manager" -ForegroundColor Yellow
     Write-Host "5. User Shared-Mailbox Access" -ForegroundColor Yellow
     Write-Host "6. Add Mailbox Permissions" -ForegroundColor Yellow
-    Write-Host "7. Exit" -ForegroundColor Yellow
+    Write-Host "7. Copy Group Memberships from user to user" -ForegroundColor Yellow
+    Write-Host "8. Hybrid Group Member Export" -ForegroundColor Yellow
+    Write-Host "9. Exit" -ForegroundColor Yellow
     Write-Host "=====================================`n" -ForegroundColor Cyan
 }
 
@@ -31,7 +33,7 @@ function Invoke-Tool {
     )
     try {
         # Check for Exchange connection if needed
-        if ($ScriptPath -notmatch "ExportGrouptoCSV" -and -not $script:ExchangeConnection.IsConnected) {
+        if ($ScriptPath -notmatch "ExportGrouptoCSV|HybridGroupExport" -and -not $script:ExchangeConnection.IsConnected) {
             Write-Host "`nExchange Online connection required." -ForegroundColor Yellow
             if (-not (Connect-ExchangeOnlineSession)) {
                 return
@@ -68,7 +70,7 @@ function Invoke-Tool {
 # Main loop
 do {
     Show-MainMenu
-    $choice = Read-Host "Select an option (0-7)"
+    $choice = Read-Host "Select an option (0-9)"
     
     switch ($choice) {
         "0" { Connect-ExchangeOnlineSession -Force }
@@ -78,7 +80,9 @@ do {
         "4" { Invoke-Tool -ScriptPath "CalendarTools.ps1" -ToolName "Calendar Permissions Manager" }
         "5" { Invoke-Tool -ScriptPath "GetSharedMailboxPermissions.ps1" -ToolName "User Shared-Mailbox Access" }
         "6" { Invoke-Tool -ScriptPath "AddMailboxPermissions.ps1" -ToolName "Add Mailbox Permissions" }
-        "7" { 
+        "7" { Invoke-Tool -ScriptPath "CopyGroupMemberships.ps1" -ToolName "Copy Group Memberships" }
+        "8" { Invoke-Tool -ScriptPath "HybridGroupExport.ps1" -ToolName "Hybrid Group Member Export" }
+        "9" { 
             if ($script:ExchangeConnection.IsConnected) {
                 Disconnect-ExchangeOnlineSession
             }
