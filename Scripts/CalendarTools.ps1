@@ -14,6 +14,48 @@ function Get-CalendarFolderName {
     }
 }
 
+function Show-AllCalendars {
+    param (
+        [Parameter(Mandatory)]
+        [string]$Mailbox
+    )
+    try {
+        $calendars = Get-MailboxFolderStatistics -Identity $Mailbox | 
+            Where-Object { 
+                $_.FolderType -eq "Calendar" -or 
+                $_.ContainerClass -eq "IPF.Calendar" -or 
+                $_.FolderPath -like "*/Calendar" -or
+                $_.FolderPath -like "*/Agenda"
+            } |
+            Select-Object Name, FolderPath, ItemsInFolder, FolderSize
+        
+        Write-Host "`nAll Calendars for $Mailbox" -ForegroundColor Cyan
+        Write-Host "----------------------------------------" -ForegroundColor Cyan
+        
+        foreach ($calendar in $calendars) {
+            Write-Host "`nCalendar Name: $($calendar.Name)" -ForegroundColor Yellow
+            Write-Host "Folder Path: $($calendar.FolderPath)"
+            Write-Host "Items in Calendar: $($calendar.ItemsInFolder)"
+            Write-Host "Folder Size: $($calendar.FolderSize)"
+            
+            # Display permissions for each calendar
+            try {
+                # Convert the folder path to the correct format
+                $folderPath = $calendar.FolderPath -replace '^/', ''  # Remove leading slash
+                $folderPath = $folderPath -replace '/', '\'  # Replace forward slashes with backslashes
+                $permissions = Get-MailboxFolderPermission -Identity "$($Mailbox):\$folderPath" -ErrorAction Stop
+                Write-Host "`nPermissions:" -ForegroundColor Green
+                $permissions | Format-Table User, AccessRights -AutoSize
+            } catch {
+                Write-Host "Unable to retrieve permissions for this calendar: $_" -ForegroundColor Red
+            }
+            Write-Host "----------------------------------------" -ForegroundColor Cyan
+        }
+    } catch {
+        Write-Host "Error retrieving calendars: $_" -ForegroundColor Red
+    }
+}
+
 function Show-CalendarPermissions {
     param (
         [Parameter(Mandatory)]
@@ -84,10 +126,11 @@ Write-Host "User: $($script:ExchangeConnection.CurrentUser)`n" -ForegroundColor 
 do {
     Write-Host "`nOptions:" -ForegroundColor Cyan
     Write-Host "1. Manage Calendar Permissions"
-    Write-Host "2. Show Access Rights Help"
-    Write-Host "3. Return to Main Menu"
+    Write-Host "2. View All Calendars"
+    Write-Host "3. Show Access Rights Help"
+    Write-Host "4. Return to Main Menu"
 
-    $choice = Read-Host "`nEnter your choice (1-3)"
+    $choice = Read-Host "`nEnter your choice (1-4)"
     
     switch ($choice) {
         "1" {
@@ -116,7 +159,11 @@ do {
                 }
             } while ($subChoice -ne "3")
         }
-        "2" { Show-AccessRightsHelp }
-        "3" { return }
+        "2" {
+            $Mailbox = Read-Host "`nEnter mailbox to view all calendars"
+            Show-AllCalendars -Mailbox $Mailbox
+        }
+        "3" { Show-AccessRightsHelp }
+        "4" { return }
     }
 } while ($true)
