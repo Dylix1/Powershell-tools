@@ -24,7 +24,8 @@ function Show-MainMenu {
     Write-Host "8. Hybrid Group Member Export" -ForegroundColor Yellow
     Write-Host "9. Sharepoint Site Permissions" -ForegroundColor Yellow
     Write-Host "10. Manage Task Permissions" -ForegroundColor Yellow
-    Write-Host "11. Exit" -ForegroundColor Yellow
+    Write-Host "11. Export All Shared Mailboxes to CSV" -ForegroundColor Yellow
+    Write-Host "12. Exit" -ForegroundColor Yellow
     Write-Host "=====================================`n" -ForegroundColor Cyan
 }
 
@@ -86,7 +87,8 @@ do {
         "8" { Invoke-Tool -ScriptPath "HybridGroupExport.ps1" -ToolName "Hybrid Group Member Export" }
         "9" { Invoke-Tool -ScriptPath "GetSharepointPermissions.ps1" -ToolName "Sharepoint Site Permissions" }
         "10" { Invoke-Tool -ScriptPath "TaskPermissionsManager.ps1" -ToolName "Manage Task Permissions" }
-        "11" { 
+        "11" { Invoke-Tool -ScriptPath "ExportSharedMailboxes.ps1" -ToolName "Export All Shared Mailboxes to CSV" }
+        "12" { 
             if ($script:ExchangeConnection.IsConnected) {
                 Disconnect-ExchangeOnlineSession
             }
