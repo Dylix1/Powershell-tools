@@ -5,17 +5,84 @@ function Get-TaskFolderName {
     )
     try {
         $folders = Get-MailboxFolderStatistics -Identity $Mailbox | 
-            Where-Object { $_.FolderType -eq "Tasks" -or $_.ContainerClass -eq "IPF.Task" } |
+            Where-Object { 
+                $_.FolderType -eq "Tasks" -or 
+                $_.ContainerClass -eq "IPF.Task" -or
+                $_.Name -eq "Tasks" -or 
+                $_.Name -eq "Taken" # Dutch word for "Tasks"
+            } |
             Select-Object Name, FolderPath
+        
+        # Debug information
+        Write-Host "Debug: Found $($folders.Count) possible task folders" -ForegroundColor DarkGray
+        
         if ($folders.Count -gt 0) {
-            return $folders[0].Name
+            # Show found folders for verification if more than one found
+            if ($folders.Count -gt 1) {
+                Write-Host "`nMultiple task folders found. Please select one:" -ForegroundColor Yellow
+                for ($i = 0; $i -lt $folders.Count; $i++) {
+                    Write-Host "$($i+1). $($folders[$i].Name) ($($folders[$i].FolderPath))" -ForegroundColor White
+                }
+                
+                $folderChoice = Read-Host "`nEnter folder number"
+                $index = [int]$folderChoice - 1
+                
+                if ($index -ge 0 -and $index -lt $folders.Count) {
+                    return $folders[$index].Name
+                } else {
+                    Write-Host "Invalid selection. Using the first folder." -ForegroundColor Yellow
+                    return $folders[0].Name
+                }
+            } else {
+                Write-Host "Using task folder: $($folders[0].Name)" -ForegroundColor DarkGray
+                return $folders[0].Name
+            }
         } else {
             Write-Host "No Task folder found for $Mailbox." -ForegroundColor Yellow
-            return "Tasks" # Default task folder name
+            
+            # If no automatic detection, check manually with a direct path test
+            try {
+                # Try Dutch first (since we know this environment is using Dutch)
+                $dutchPath = "$($Mailbox):\Taken"
+                Get-MailboxFolderPermission -Identity $dutchPath -ErrorAction Stop | Out-Null
+                Write-Host "Found Dutch task folder (Taken) via direct path check" -ForegroundColor DarkGray
+                return "Taken"
+            } catch {
+                try {
+                    # Try English
+                    $englishPath = "$($Mailbox):\Tasks"
+                    Get-MailboxFolderPermission -Identity $englishPath -ErrorAction Stop | Out-Null
+                    Write-Host "Found English task folder (Tasks) via direct path check" -ForegroundColor DarkGray
+                    return "Tasks"
+                } catch {
+                    # If both fail, prompt the user
+                    Write-Host "`nPlease select the language of the task folder:" -ForegroundColor Cyan
+                    Write-Host "1. English (Tasks)" -ForegroundColor Yellow
+                    Write-Host "2. Dutch (Taken)" -ForegroundColor Yellow
+                    $langChoice = Read-Host "`nEnter your choice (1-2)"
+                    
+                    if ($langChoice -eq "2") {
+                        return "Taken" # Dutch task folder name
+                    } else {
+                        return "Tasks" # Default English task folder name
+                    }
+                }
+            }
         }
     } catch {
         Write-Host "Error getting task folder name: $_" -ForegroundColor Red
-        return "Tasks" # Default task folder name
+        
+        # Last resort fallback
+        Write-Host "`nPlease select the language of the task folder:" -ForegroundColor Cyan
+        Write-Host "1. English (Tasks)" -ForegroundColor Yellow
+        Write-Host "2. Dutch (Taken)" -ForegroundColor Yellow
+        $langChoice = Read-Host "`nEnter your choice (1-2)"
+        
+        if ($langChoice -eq "2") {
+            return "Taken" # Dutch task folder name
+        } else {
+            return "Tasks" # Default English task folder name
+        }
     }
 }
 
@@ -29,7 +96,10 @@ function Show-AllTaskFolders {
             Where-Object { 
                 $_.FolderType -eq "Tasks" -or 
                 $_.ContainerClass -eq "IPF.Task" -or 
-                $_.FolderPath -like "*/Tasks" 
+                $_.FolderPath -like "*/Tasks" -or
+                $_.FolderPath -like "*/Taken" -or # Dutch path
+                $_.Name -eq "Tasks" -or
+                $_.Name -eq "Taken" # Dutch name
             } |
             Select-Object Name, FolderPath, ItemsInFolder, FolderSize
         
@@ -177,6 +247,16 @@ Clear-Host
 Write-Host "=== Exchange Online Task Permissions Manager ===" -ForegroundColor Cyan
 Write-Host "`nConnected to: $($script:ExchangeConnection.OrganizationName)" -ForegroundColor Green
 Write-Host "User: $($script:ExchangeConnection.CurrentUser)`n" -ForegroundColor Green
+
+# Language detection and user preference
+$script:TasksFolderNames = @{
+    "English" = "Tasks";
+    "Dutch" = "Taken"
+}
+
+Write-Host "Language support enabled for task folders:" -ForegroundColor Yellow
+Write-Host "- English: Tasks" -ForegroundColor White
+Write-Host "- Dutch: Taken" -ForegroundColor White
 
 do {
     Write-Host "`nOptions:" -ForegroundColor Cyan
