@@ -21,11 +21,12 @@ function Show-MainMenu {
     Write-Host "5. User Shared-Mailbox Access" -ForegroundColor Yellow
     Write-Host "6. Add Mailbox Permissions" -ForegroundColor Yellow
     Write-Host "7. Copy Group Memberships from user to user" -ForegroundColor Yellow
-    Write-Host "8. Hybrid Group Member Export" -ForegroundColor Yellow
-    Write-Host "9. Sharepoint Site Permissions" -ForegroundColor Yellow
-    Write-Host "10. Manage Task Permissions" -ForegroundColor Yellow
-    Write-Host "11. Export All Shared Mailboxes to CSV" -ForegroundColor Yellow
-    Write-Host "12. Exit" -ForegroundColor Yellow
+    Write-Host "8. Copy group members from group to group Memberships" -ForegroundColor Yellow
+    Write-Host "9. Hybrid Group Member Export" -ForegroundColor Yellow
+    Write-Host "10. Sharepoint Site Permissions" -ForegroundColor Yellow
+    Write-Host "11. Manage Task Permissions" -ForegroundColor Yellow
+    Write-Host "12. Export All Shared Mailboxes to CSV" -ForegroundColor Yellow
+    Write-Host "13. Exit" -ForegroundColor Yellow
     Write-Host "=====================================`n" -ForegroundColor Cyan
 }
 
@@ -73,7 +74,7 @@ function Invoke-Tool {
 # Main loop
 do {
     Show-MainMenu
-    $choice = Read-Host "Select an option (0-11)"
+    $choice = Read-Host "Select an option (0-13)"
     
     switch ($choice) {
         "0" { Connect-ExchangeOnlineSession -Force }
@@ -84,11 +85,12 @@ do {
         "5" { Invoke-Tool -ScriptPath "GetSharedMailboxPermissions.ps1" -ToolName "User Shared-Mailbox Access" }
         "6" { Invoke-Tool -ScriptPath "AddMailboxPermissions.ps1" -ToolName "Add Mailbox Permissions" }
         "7" { Invoke-Tool -ScriptPath "CopyGroupMemberships.ps1" -ToolName "Copy Group Memberships" }
-        "8" { Invoke-Tool -ScriptPath "HybridGroupExport.ps1" -ToolName "Hybrid Group Member Export" }
-        "9" { Invoke-Tool -ScriptPath "GetSharepointPermissions.ps1" -ToolName "Sharepoint Site Permissions" }
-        "10" { Invoke-Tool -ScriptPath "TaskPermissionsManager.ps1" -ToolName "Manage Task Permissions" }
-        "11" { Invoke-Tool -ScriptPath "ExportSharedMailboxes.ps1" -ToolName "Export All Shared Mailboxes to CSV" }
-        "12" { 
+        "8" { Invoke-Tool -ScriptPath "CopyGroupMembers.ps1" -ToolName "Copy group members from group to group Memberships" }
+        "9" { Invoke-Tool -ScriptPath "HybridGroupExport.ps1" -ToolName "Hybrid Group Member Export" }
+        "10" { Invoke-Tool -ScriptPath "GetSharepointPermissions.ps1" -ToolName "Sharepoint Site Permissions" }
+        "11" { Invoke-Tool -ScriptPath "TaskPermissionsManager.ps1" -ToolName "Manage Task Permissions" }
+        "12" { Invoke-Tool -ScriptPath "ExportSharedMailboxes.ps1" -ToolName "Export All Shared Mailboxes to CSV" }
+        "13" { 
             if ($script:ExchangeConnection.IsConnected) {
                 Disconnect-ExchangeOnlineSession
             }
