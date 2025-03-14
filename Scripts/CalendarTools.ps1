@@ -9,7 +9,9 @@ function Get-CalendarFolderName {
             Select-Object Name, FolderPath
         return $folders[0].Name
     } catch {
-        Write-Host "Error getting calendar folder name: $_" -ForegroundColor Red
+        $errorMsg = $Error[0].Exception.Message
+        Write-Host "Error getting calendar folder name" -ForegroundColor Red
+        Write-Host "Reason: $errorMsg" -ForegroundColor Red
         return $null
     }
 }
@@ -47,12 +49,16 @@ function Show-AllCalendars {
                 Write-Host "`nPermissions:" -ForegroundColor Green
                 $permissions | Format-Table User, AccessRights -AutoSize
             } catch {
-                Write-Host "Unable to retrieve permissions for this calendar: $_" -ForegroundColor Red
+                $errorMsg = $Error[0].Exception.Message
+                Write-Host "Unable to retrieve permissions for this calendar" -ForegroundColor Red
+                Write-Host "Reason: $errorMsg" -ForegroundColor Red
             }
             Write-Host "----------------------------------------" -ForegroundColor Cyan
         }
     } catch {
-        Write-Host "Error retrieving calendars: $_" -ForegroundColor Red
+        $errorMsg = $Error[0].Exception.Message
+        Write-Host "Error retrieving calendars" -ForegroundColor Red
+        Write-Host "Reason: $errorMsg" -ForegroundColor Red
     }
 }
 
@@ -68,7 +74,9 @@ function Show-CalendarPermissions {
         Write-Host "`nCurrent Calendar Permissions:" -ForegroundColor Cyan
         $permissions | Format-Table User, AccessRights -AutoSize
     } catch {
-        Write-Host "Error getting calendar permissions: $_" -ForegroundColor Red
+        $errorMsg = $Error[0].Exception.Message
+        Write-Host "Error getting calendar permissions" -ForegroundColor Red
+        Write-Host "Reason: $errorMsg" -ForegroundColor Red
     }
 }
 
@@ -96,7 +104,78 @@ function Set-CalendarPermission {
         }
         return $true
     } catch {
-        Write-Host "Error setting calendar permission: $_" -ForegroundColor Red
+        $errorMsg = $Error[0].Exception.Message
+        Write-Host "Error setting calendar permission" -ForegroundColor Red
+        Write-Host "Reason: $errorMsg" -ForegroundColor Red
+        return $false
+    }
+}
+
+function Set-CalendarPermissionForDomain {
+    param (
+        [Parameter(Mandatory)]
+        [string]$Mailbox,
+        [Parameter(Mandatory)]
+        [string]$CalendarName,
+        [Parameter(Mandatory)]
+        [string]$Domain,
+        [Parameter(Mandatory)]
+        [ValidateSet("Owner", "PublishingEditor", "Editor", "PublishingAuthor", "Author", "NonEditingAuthor", "Reviewer", "Contributor", "None")]
+        [string]$AccessRight
+    )
+    try {
+        # Get all users with the specified domain
+        Write-Host "Searching for users with domain: $Domain" -ForegroundColor Cyan
+        $users = Get-Mailbox -ResultSize Unlimited | Where-Object {$_.PrimarySmtpAddress -like "*@$Domain"}
+        
+        if ($users.Count -eq 0) {
+            Write-Host "No users found with the domain: $Domain" -ForegroundColor Yellow
+            return $false
+        }
+        
+        Write-Host "Found $($users.Count) users with domain $Domain" -ForegroundColor Cyan
+        $confirmation = Read-Host "Are you sure you want to grant '$AccessRight' permissions to all $($users.Count) users? (Y/N)"
+        
+        if ($confirmation -ne "Y" -and $confirmation -ne "y") {
+            Write-Host "Operation cancelled." -ForegroundColor Yellow
+            return $false
+        }
+        
+        $successCount = 0
+        $failCount = 0
+        
+        foreach ($user in $users) {
+            $userEmail = $user.PrimarySmtpAddress
+            Write-Host "Setting permission for $userEmail..." -ForegroundColor Gray
+            
+            try {
+                $existingPermission = Get-MailboxFolderPermission -Identity "$($Mailbox):\$CalendarName" -User $userEmail -ErrorAction SilentlyContinue
+                
+                if ($existingPermission) {
+                    Set-MailboxFolderPermission -Identity "$($Mailbox):\$CalendarName" -User $userEmail -AccessRights $AccessRight -ErrorAction Stop
+                } else {
+                    Add-MailboxFolderPermission -Identity "$($Mailbox):\$CalendarName" -User $userEmail -AccessRights $AccessRight -ErrorAction Stop
+                }
+                $successCount++
+            } catch {
+                $errorMsg = $Error[0].Exception.Message
+                Write-Host "Error setting permission for $userEmail" -ForegroundColor Red
+                Write-Host "Reason: $errorMsg" -ForegroundColor Red
+                $failCount++
+            }
+        }
+        
+        Write-Host "`nPermission assignment complete:" -ForegroundColor Green
+        Write-Host "- Successfully set permissions for $successCount users" -ForegroundColor Green
+        if ($failCount -gt 0) {
+            Write-Host "- Failed to set permissions for $failCount users" -ForegroundColor Red
+        }
+        
+        return $true
+    } catch {
+        $errorMsg = $Error[0].Exception.Message
+        Write-Host "Error setting domain permissions" -ForegroundColor Red
+        Write-Host "Reason: $errorMsg" -ForegroundColor Red
         return $false
     }
 }
@@ -128,9 +207,10 @@ do {
     Write-Host "1. Manage Calendar Permissions"
     Write-Host "2. View All Calendars"
     Write-Host "3. Show Access Rights Help"
-    Write-Host "4. Return to Main Menu"
+    Write-Host "4. Add Domain Permissions"
+    Write-Host "5. Return to Main Menu"
 
-    $choice = Read-Host "`nEnter your choice (1-4)"
+    $choice = Read-Host "`nEnter your choice (1-5)"
     
     switch ($choice) {
         "1" {
@@ -164,6 +244,20 @@ do {
             Show-AllCalendars -Mailbox $Mailbox
         }
         "3" { Show-AccessRightsHelp }
-        "4" { return }
+        "4" {
+            $Mailbox = Read-Host "`nEnter mailbox to manage"
+            $CalendarName = Get-CalendarFolderName -Mailbox $Mailbox
+            if (!$CalendarName) { continue }
+            
+            $Domain = Read-Host "`nEnter domain (e.g., example.com)"
+            if ([string]::IsNullOrWhiteSpace($Domain)) { continue }
+            
+            Show-AccessRightsHelp
+            $AccessRight = Read-Host "`nEnter access right"
+            if ([string]::IsNullOrWhiteSpace($AccessRight)) { continue }
+            
+            Set-CalendarPermissionForDomain -Mailbox $Mailbox -CalendarName $CalendarName -Domain $Domain -AccessRight $AccessRight
+        }
+        "5" { return }
     }
 } while ($true)

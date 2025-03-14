@@ -26,7 +26,9 @@ function Show-MainMenu {
     Write-Host "10. Sharepoint Site Permissions" -ForegroundColor Yellow
     Write-Host "11. Manage Task Permissions" -ForegroundColor Yellow
     Write-Host "12. Export All Shared Mailboxes to CSV" -ForegroundColor Yellow
-    Write-Host "13. Exit" -ForegroundColor Yellow
+    Write-Host "13. Add multiple users to distribution list" -ForegroundColor Yellow
+    Write-Host "14. List sharepoint group of a user" -ForegroundColor Yellow
+    Write-Host "15. Exit" -ForegroundColor Yellow
     Write-Host "=====================================`n" -ForegroundColor Cyan
 }
 
@@ -74,7 +76,7 @@ function Invoke-Tool {
 # Main loop
 do {
     Show-MainMenu
-    $choice = Read-Host "Select an option (0-13)"
+    $choice = Read-Host "Select an option (0-15)"
     
     switch ($choice) {
         "0" { Connect-ExchangeOnlineSession -Force }
@@ -90,7 +92,9 @@ do {
         "10" { Invoke-Tool -ScriptPath "GetSharepointPermissions.ps1" -ToolName "Sharepoint Site Permissions" }
         "11" { Invoke-Tool -ScriptPath "TaskPermissionsManager.ps1" -ToolName "Manage Task Permissions" }
         "12" { Invoke-Tool -ScriptPath "ExportSharedMailboxes.ps1" -ToolName "Export All Shared Mailboxes to CSV" }
-        "13" { 
+        "13" { Invoke-Tool -ScriptPath "AddMultipleGroupUsers.ps1" -ToolName "Add multiple users to distribution list" }
+        "14" { Invoke-Tool -ScriptPath "SPOUserGroupmemberships.ps1" -ToolName "List sharepoint group of a user" }
+        "15" { 
             if ($script:ExchangeConnection.IsConnected) {
                 Disconnect-ExchangeOnlineSession
             }
