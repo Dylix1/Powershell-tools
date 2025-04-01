@@ -1,57 +1,7 @@
-# Global variable to track connection state
-$script:ExchangeConnection = @{
-    IsConnected = $false
-    CurrentUser = $null
-    OrganizationName = $null
-}
-
-function Connect-ExchangeOnlineSession {
-    param (
-        [Parameter(Mandatory=$false)]
-        [string]$AdminUser
-    )
-    
-    try {
-        # Verify Exchange Online module
-        if (!(Get-Module -ListAvailable -Name ExchangeOnlineManagement)) {
-            Write-Host "Exchange Online PowerShell module is not installed." -ForegroundColor Red
-            Write-Host "Please install it by running: Install-Module -Name ExchangeOnlineManagement" -ForegroundColor Yellow
-            return $false
-        }
-
-        # Get admin credentials if not provided
-        if (-not $AdminUser) {
-            $AdminUser = Read-Host "`nEnter your Exchange Online admin email address"
-        }
-
-        # Import module and connect
-        Import-Module ExchangeOnlineManagement -ErrorAction Stop
-        Connect-ExchangeOnline -UserPrincipalName $AdminUser -ShowProgress $false -ShowBanner:$false
-        
-        # Test connection
-        try {
-            $org = Get-OrganizationConfig -ErrorAction Stop
-            $script:ExchangeConnection.IsConnected = $true
-            $script:ExchangeConnection.CurrentUser = $AdminUser
-            $script:ExchangeConnection.OrganizationName = $org.DisplayName
-            Write-Host "`nSuccessfully connected to Exchange Online:" -ForegroundColor Green
-            Write-Host "Organization: $($org.DisplayName)" -ForegroundColor Green
-            Write-Host "User: $AdminUser" -ForegroundColor Green
-            return $true
-        } catch {
-            Write-Host "`nFailed to verify Exchange connection: $_" -ForegroundColor Red
-            return $false
-        }
-    } catch {
-        Write-Host "`nError connecting to Exchange Online:" -ForegroundColor Red
-        Write-Host $_ -ForegroundColor Red
-        return $false
-    }
-}
-
 function Get-UserMailboxPermissions {
     param (
         [string]$UserIdentity,
+        [string]$DomainFilter,
         [string]$OutputFile
     )
     try {
@@ -64,11 +14,25 @@ function Get-UserMailboxPermissions {
         
         # Get all mailboxes
         Write-Host "`nGetting all mailboxes in the tenant..." -ForegroundColor Yellow
-        $mailboxes = Get-Mailbox -ResultSize Unlimited
+        
+        # Apply domain filter if specified
+        if (-not [string]::IsNullOrWhiteSpace($DomainFilter)) {
+            Write-Host "Filtering mailboxes for domain: $DomainFilter" -ForegroundColor Cyan
+            $mailboxes = Get-Mailbox -ResultSize Unlimited | Where-Object { $_.PrimarySmtpAddress -like "*@$DomainFilter" }
+        } else {
+            $mailboxes = Get-Mailbox -ResultSize Unlimited
+        }
+        
         Write-Host "Found $($mailboxes.Count) mailboxes to check." -ForegroundColor Green
+        
+        # Counter for progress display
+        $counter = 0
+        $totalMailboxes = $mailboxes.Count
 
         foreach ($mailbox in $mailboxes) {
-            Write-Host "`nChecking permissions on mailbox: $($mailbox.DisplayName)" -ForegroundColor Yellow
+            $counter++
+            $percentComplete = [math]::Round(($counter / $totalMailboxes) * 100)
+            Write-Progress -Activity "Checking mailbox permissions" -Status "Processing $counter of $totalMailboxes ($percentComplete%)" -PercentComplete $percentComplete
             
             # Check Full Access permissions
             $fullAccess = Get-MailboxPermission -Identity $mailbox.Identity | 
@@ -98,7 +62,7 @@ function Get-UserMailboxPermissions {
                         Where-Object { $_.User -eq $UserIdentity }
                 }
             } catch {
-                Write-Host "Could not check calendar permissions for $($mailbox.DisplayName)" -ForegroundColor Yellow
+                # Silently continue if calendar permissions cannot be checked
             }
 
             # Add permissions to results if any found
@@ -142,6 +106,9 @@ function Get-UserMailboxPermissions {
                 }
             }
         }
+        
+        # Clear progress bar
+        Write-Progress -Activity "Checking mailbox permissions" -Completed
 
         # Display and export results
         if ($results.Count -eq 0) {
@@ -165,35 +132,38 @@ function Get-UserMailboxPermissions {
 # Main script
 Clear-Host
 Write-Host "=== Exchange Online User Mailbox Permissions Report ===" -ForegroundColor Cyan
-
-# First, connect with admin account
-$adminEmail = Read-Host "Enter your Exchange Online admin email address"
-$connected = Connect-ExchangeOnlineSession -AdminUser $adminEmail
-
-if (-not $connected) {
-    Write-Host "Failed to connect to Exchange Online. Exiting..." -ForegroundColor Red
-    return
-}
-
 Write-Host "`nConnected to: $($script:ExchangeConnection.OrganizationName)" -ForegroundColor Green
 Write-Host "User: $($script:ExchangeConnection.CurrentUser)`n" -ForegroundColor Green
 
-# Prompt for user
-$userIdentity = Read-Host "Enter the email address of the user to check permissions for"
+do {
+    Write-Host "`nOptions:" -ForegroundColor Cyan
+    Write-Host "1. Check User's Mailbox Permissions (All Domains)"
+    Write-Host "2. Check User's Mailbox Permissions (Specific Domain)"
+    Write-Host "3. Return to Main Menu"
+    
+    $choice = Read-Host "`nEnter your choice (1-3)"
+    
+    if ($choice -eq '3') { return }
+    
+    if ($choice -in '1','2') {
+        $userIdentity = Read-Host "`nEnter the email address of the user to check permissions for"
+        
+        $domainFilter = $null
+        if ($choice -eq '2') {
+            $domainFilter = Read-Host "Enter domain to filter mailboxes (e.g., contoso.com)"
+        }
 
-$exportChoice = Read-Host "Do you want to export the results to a CSV file? (Y/N)"
-if ($exportChoice -eq 'Y' -or $exportChoice -eq 'y') {
-    $defaultPath = "C:\UserMailboxPermissions.csv"
-    Write-Host "Default export path is: $defaultPath"
-    $customPath = Read-Host "Press Enter to use default path or type a custom path"
-    $outputFile = if ($customPath) { $customPath } else { $defaultPath }
-} else {
-    $outputFile = $null
-}
+        $exportChoice = Read-Host "Do you want to export the results to a CSV file? (Y/N)"
+        if ($exportChoice -eq 'Y' -or $exportChoice -eq 'y') {
+            $defaultPath = "C:\UserMailboxPermissions_$(Get-Date -Format 'yyyyMMdd_HHmmss').csv"
+            Write-Host "Default export path is: $defaultPath"
+            $customPath = Read-Host "Press Enter to use default path or type a custom path"
+            $outputFile = if ($customPath) { $customPath } else { $defaultPath }
+        } else {
+            $outputFile = $null
+        }
 
-Write-Host "`nRetrieving user's mailbox permissions..." -ForegroundColor Cyan
-Get-UserMailboxPermissions -UserIdentity $userIdentity -OutputFile $outputFile
-
-# Disconnect session
-Disconnect-ExchangeOnline -Confirm:$false
-Write-Host "`nDisconnected from Exchange Online." -ForegroundColor Green
+        Write-Host "`nRetrieving user's mailbox permissions..." -ForegroundColor Cyan
+        Get-UserMailboxPermissions -UserIdentity $userIdentity -DomainFilter $domainFilter -OutputFile $outputFile
+    }
+} while ($true)
